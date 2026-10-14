@@ -1,0 +1,167 @@
+import { Link } from "@tanstack/react-router";
+import type { CourseCard, PostItem, VideoItem } from "@/lib/learning-types";
+import { useI18n } from "@/lib/i18n";
+import { formatWhen, pick } from "@/lib/text";
+import { CourseCardView } from "@/components/courses/cards";
+import { youtubeThumbnail } from "@/lib/youtube";
+
+export function HomePage({
+  courses,
+  videos,
+  posts,
+}: {
+  courses: CourseCard[];
+  videos: VideoItem[];
+  posts: PostItem[];
+}) {
+  const { lang, t } = useI18n();
+  const featured = courses.slice(0, 3);
+  return (
+    <div>
+      <section className="mesh border-b border-line">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 lg:grid-cols-[1.1fr_0.9fr] lg:py-20">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-accent">
+              {t("English and Amharic", "እንግሊዝኛ እና አማርኛ")}
+            </p>
+            <h1 className="mt-3 max-w-xl font-display text-5xl leading-tight sm:text-6xl">
+              {t("Your next step starts here.", "ቀጣይ እርምጃዎ ከዚህ ይጀምራል።")}
+            </h1>
+            <p className="mt-4 max-w-xl text-lg text-ink-soft">
+              {t(
+                "Learn web development through guided lessons, practice quizzes, and a project for each course. Study in English or Amharic, then verify what you finished.",
+                "የድረ-ገጽ ልማትን በተመራ ትምህርቶች፣ በልምምድ ፈተናዎች እና በእያንዳንዱ ኮርስ ፕሮጀክት ይማሩ። በእንግሊዝኛ ወይም በአማርኛ ያጠኑ፣ ያጠናቀቁትንም ያረጋግጡ።",
+              )}
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link to="/courses" className="btn btn-primary">{t("Explore courses", "ኮርሶችን ይመልከቱ")}</Link>
+              <Link to="/videos" className="btn btn-secondary">{t("Watch videos", "ቪዲዮዎችን ይመልከቱ")}</Link>
+            </div>
+          </div>
+          <div className="relative mx-auto w-full max-w-lg pb-8 sm:pb-10">
+            <div className="overflow-hidden rounded-3xl">
+              <img
+                src="/images/hero-student.jpg"
+                alt={t("A student learning web development", "የድር ገጽ ልማትን እየተማረ ያለ ተማሪ")}
+                className="aspect-[4/3] w-full object-cover object-center"
+              />
+            </div>
+
+            <div className="card relative mx-auto -mt-10 w-[92%] overflow-hidden shadow-xl sm:-mt-14" aria-hidden="true">
+              <div className="flex items-center gap-2 border-b border-line bg-ink px-4 py-3">
+                <span className="size-2.5 rounded-full bg-accent" />
+                <span className="size-2.5 rounded-full bg-warn" />
+                <span className="size-2.5 rounded-full bg-ok" />
+                <span className="ml-2 text-xs text-paper/70">index.html</span>
+              </div>
+              <pre className="overflow-x-auto bg-ink p-4 text-xs leading-6 text-paper sm:p-5 sm:text-sm sm:leading-7">
+                <span className="text-accent-soft">{"<!DOCTYPE html>"}</span>{"\n"}
+                <span className="text-accent">{"<html "}</span>
+                <span className="text-ok">lang</span>
+                <span className="text-paper">="en"</span>
+                <span className="text-accent">{">"}</span>{"\n"}
+                {"  "}
+                <span className="text-accent">{"<h1>"}</span>
+                Hello, NextStep
+                <span className="text-accent">{"</h1>"}</span>{"\n"}
+                <span className="text-accent">{"</html>"}</span>
+              </pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {featured.length ? (
+        <section className="mx-auto max-w-6xl px-4 py-16">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <h2 className="font-display text-3xl">{t("Featured courses", "የተመረጡ ኮርሶች")}</h2>
+            <Link to="/courses" className="text-sm font-bold text-accent">{t("All courses", "ሁሉም ኮርሶች")}</Link>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {featured.map((course) => <CourseCardView key={course.id} course={course} />)}
+          </div>
+        </section>
+      ) : null}
+
+      {videos.length ? (
+        <section className="border-y border-line bg-card">
+          <div className="mx-auto max-w-6xl px-4 py-16">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <h2 className="font-display text-3xl">{t("Learn through videos", "በቪዲዮ ይማሩ")}</h2>
+              <Link to="/videos" className="text-sm font-bold text-accent">{t("Video library", "የቪዲዮ ቤተ-መጽሐፍት")}</Link>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {videos.map((video) => (
+                <Link key={video.id} to="/videos/$id" params={{ id: video.id }} className="card overflow-hidden">
+                  <img src={video.thumbnailUrl || youtubeThumbnail(video.youtubeId)} alt="" className="aspect-video w-full object-cover" />
+                  <div className="p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted">{video.language === "am" ? "አማርኛ" : "English"}</p>
+                    <h3 className="mt-1 font-display text-xl">{video.title}</h3>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {courses.length ? (
+        <section id="path" className="mx-auto max-w-6xl px-4 py-16">
+          <h2 className="font-display text-3xl">{t("A path you can follow", "መከተል የሚችሉት መንገድ")}</h2>
+          <p className="mt-2 max-w-2xl text-ink-soft">
+            {t(
+              "Start with the published beginner courses. Each one ends with a project your work can be reviewed against.",
+              "ከታተሙ የጀማሪ ኮርሶች ይጀምሩ። እያንዳንዱ በፕሮጀክት ያበቃል፣ ስራዎም በዚያ መሰረት ሊገመገም ይችላል።",
+            )}
+          </p>
+          <ol className="mt-6 grid gap-3">
+            {courses.map((course, index) => (
+              <li key={course.id}>
+                <Link to="/courses/$slug" params={{ slug: course.slug }} className="card flex items-center gap-4 p-4 hover:border-accent">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent text-accent-ink font-bold">{index + 1}</span>
+                  <span>
+                    <span className="block font-display text-xl">{pick(lang, course.title, course.titleAm)}</span>
+                    <span className="text-sm text-muted">{pick(lang, course.projectTitle, course.projectTitleAm)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {posts.length ? (
+        <section className="border-t border-line">
+          <div className="mx-auto max-w-6xl px-4 py-16">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <h2 className="font-display text-3xl">{t("Latest news", "የቅርብ ዜና")}</h2>
+              <Link to="/news" className="text-sm font-bold text-accent">{t("All posts", "ሁሉም ጽሁፎች")}</Link>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {posts.map((post) => (
+                <Link key={post.id} to="/news/$slug" params={{ slug: post.slug }} className="card p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted">{formatWhen(post.publishedAt, lang)}</p>
+                  <h3 className="mt-2 font-display text-xl">{post.title}</h3>
+                  <p className="mt-2 text-sm text-ink-soft">{post.summary}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mx-auto max-w-6xl px-4 pb-8">
+        <div className="card bg-ink px-6 py-10 text-paper sm:px-10">
+          <h2 className="font-display text-4xl">{t("Ready to take the next step?", "ቀጣዩን እርምጃ ለመውሰድ ዝግጁ ነዎት?")}</h2>
+          <p className="mt-2 max-w-xl text-accent-soft">
+            {t("Create an account, enroll in a course, and keep your progress with you.", "መለያ ይክፈቱ፣ በኮርስ ይመዝገቡ፣ ሂደትዎም ከእርስዎ ጋር ይቆይ።")}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link to="/login" search={{ mode: "login", redirect: "/dashboard" }} className="btn btn-primary">{t("Create an account", "መለያ ይክፈቱ")}</Link>
+            <Link to="/courses" className="btn btn-secondary">{t("Explore courses", "ኮርሶችን ይመልከቱ")}</Link>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
