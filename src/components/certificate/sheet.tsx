@@ -59,14 +59,21 @@ export function CertificateSheet({
           <div className="grid gap-1 text-sm">
             <p><span className="text-muted">{t("Certificate ID", "የምስክር መለያ")}</span> · {certificate.code}</p>
             <p><span className="text-muted">{t("Issued", "የተሰጠበት")}</span> · {formatWhen(certificate.issuedAt, lang)}</p>
-            {certificate.issuerName ? (
-              <p className="pt-3">
-                <span className="block font-display text-xl">{certificate.issuerName}</span>
-                <span className="text-muted">{certificate.issuerRole || t("Issuer", "አውጪ")}</span>
+            <div className="pt-4">
+              <img
+                src="/images/signature.png"
+                alt=""
+                width={160}
+                height={72}
+                className="h-14 w-auto max-w-[10rem] object-contain object-left"
+              />
+              <p className="mt-1 font-display text-xl leading-tight">
+                {certificate.issuerName || "Yoseph Abaynew"}
               </p>
-            ) : (
-              <p className="pt-3 text-muted">{t("Issued by NextStep Coding", "በNextStep Coding የተሰጠ")}</p>
-            )}
+              <p className="text-sm text-muted">
+                {certificate.issuerRole || "Founder & Developer"}
+              </p>
+            </div>
           </div>
           <div className="grid justify-items-center gap-1">
             <Qr value={verifyUrl} />

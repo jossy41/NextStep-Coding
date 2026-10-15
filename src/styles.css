@@ -93,4 +93,5 @@
   body { background: white; }
   .no-print { display: none !important; }
   .certificate-sheet { box-shadow: none !important; }
+  .certificate-sheet img { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
