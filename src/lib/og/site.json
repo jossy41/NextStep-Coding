@@ -1,4 +1,10 @@
 {
-  "title": "NextStep Coding",
-  "card": "custom"
+  "title": "NextStep Coding — Your Next Step Starts Here",
+  "description": "Learn web development through guided lessons, quizzes, and practical projects. Study in English or Amharic and build your coding skills with NextStep Coding.",
+  "card": "custom",
+  "type": "website",
+  "siteName": "NextStep Coding",
+  "url": "https://next-step-coding.vercel.app/",
+  "imageUrl": "https://next-step-coding.vercel.app/og.jpg",
+  "imageAlt": "NextStep Coding — Learn, Practice, Build"
 }

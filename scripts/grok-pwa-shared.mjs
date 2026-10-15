@@ -16,6 +16,7 @@ const SHARE_META_KEYS = new Set([
   "og:image",
   "og:image:width",
   "og:image:height",
+  "og:image:alt",
   "og:type",
   "og:url",
   "og:site_name",
@@ -356,10 +357,24 @@ export function grokOgHeadTags({
   if (description) {
     tags.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
   }
-  if (String(site.type ?? "").toLowerCase() === "x:game") {
+  const siteType = String(site.type ?? "").toLowerCase();
+  if (siteType === "x:game") {
     tags.push(`<meta property="og:type" content="x:game">`);
+  } else if (siteType === "website") {
+    tags.push(`<meta property="og:type" content="website">`);
   }
-  if (publicHost) {
+  const imageUrl = String(site.imageUrl ?? "").trim();
+  const useAbsoluteImage = imageUrl.startsWith("https://");
+  if (useAbsoluteImage) {
+    tags.push(`<meta property="og:image" content="${escapeHtml(imageUrl)}">`);
+    tags.push(`<meta property="og:image:width" content="1200">`);
+    tags.push(`<meta property="og:image:height" content="630">`);
+    const imageAlt = String(site.imageAlt ?? "").trim();
+    if (imageAlt) {
+      tags.push(`<meta property="og:image:alt" content="${escapeHtml(imageAlt)}">`);
+    }
+    tags.push(`<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`);
+  } else if (publicHost) {
     const asset = resolveOgCardAsset(site, cwd);
     const custom = Boolean(asset);
     let image = custom
@@ -376,6 +391,20 @@ export function grokOgHeadTags({
       tags.push(`<meta property="x:game:image" content="${escapeHtml(bannerUrl)}">`);
       tags.push(`<meta property="x:game:image:width" content="1200">`);
       tags.push(`<meta property="x:game:image:height" content="264">`);
+    }
+  }
+  const siteName = String(site.siteName ?? "").trim();
+  if (siteName) {
+    tags.push(`<meta property="og:site_name" content="${escapeHtml(siteName)}">`);
+  }
+  const pageUrl = String(site.url ?? "").trim();
+  if (pageUrl.startsWith("https://")) {
+    tags.push(`<meta property="og:url" content="${escapeHtml(pageUrl)}">`);
+  }
+  if (useAbsoluteImage || siteName || pageUrl.startsWith("https://")) {
+    tags.push(`<meta name="twitter:title" content="${escapeHtml(title)}">`);
+    if (description) {
+      tags.push(`<meta name="twitter:description" content="${escapeHtml(description)}">`);
     }
   }
   return tags;

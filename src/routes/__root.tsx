@@ -14,15 +14,17 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "NextStep Coding" },
+      { title: "NextStep Coding — Your Next Step Starts Here" },
       {
         name: "description",
-        content: "Learn web development in English and Amharic with NextStep Coding.",
+        content:
+          "Learn web development through guided lessons, quizzes, and practical projects. Study in English or Amharic and build your coding skills with NextStep Coding.",
       },
       { name: "theme-color", content: "#122033" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "canonical", href: "https://next-step-coding.vercel.app/" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
