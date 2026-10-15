@@ -41,3 +41,4 @@ Local editor settings
 .vscode/
 .idea/
 .grok/
+artifacts/
