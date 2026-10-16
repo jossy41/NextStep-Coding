@@ -205,6 +205,25 @@ function removeRequestCookie(headers: Headers, name: string): void {
   }
 }
 
+/**
+ * Paths that create a new session and must reliably set the session cookie.
+ * TanStack Start does not always copy Better Auth's internal Set-Cookie bag
+ * onto the final response; without this after-hook, email/password (and some
+ * OAuth) logins leave the browser without a session cookie → login loops and
+ * intermittent "Could not load your dashboard/account".
+ */
+function isSessionCreatingPath(path: string | undefined): boolean {
+  if (!path) return false;
+  return (
+    path === "/sign-in/email" ||
+    path === "/sign-up/email" ||
+    path === "/sign-in/social" ||
+    path.startsWith("/callback/") ||
+    path === "/sign-in/oauth2" ||
+    path === "/oauth2/callback"
+  );
+}
+
 export function gateIdentitySessions() {
   return {
     id: "grok-gate-identity",
@@ -334,6 +353,47 @@ export function gateIdentitySessions() {
           }),
         },
       ],
+      after: [
+        {
+          // Force dual-path Set-Cookie after email/password and OAuth session
+          // creation. The stock tanstackStartCookies plugin alone is not
+          // reliable on every response path (documented in emitSessionCookie).
+          matcher: (ctx: { path?: string }) => isSessionCreatingPath(ctx.path),
+          handler: createAuthMiddleware(async (ctx) => {
+            try {
+              const newSession = (
+                ctx.context as {
+                  newSession?: {
+                    session?: { token?: string };
+                    user?: { id?: string };
+                  };
+                }
+              ).newSession;
+              const token = newSession?.session?.token;
+              if (!token) return;
+              const sessionCookieName =
+                ctx.context.authCookies.sessionToken.name;
+              const sessionValue = await emitSessionCookie(
+                ctx,
+                sessionCookieName,
+                token,
+              );
+              if (!sessionValue) {
+                console.error(
+                  `${LOG} session-creating path ${ctx.path}: cookie not emitted`,
+                  { userId: newSession?.user?.id },
+                );
+              }
+            } catch (err) {
+              console.error(
+                `${LOG} after session-create cookie emit failed`,
+                err,
+              );
+            }
+          }),
+        },
+      ],
     },
   } satisfies BetterAuthPlugin;
 }
+

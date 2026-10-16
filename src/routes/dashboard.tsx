@@ -21,21 +21,32 @@ function DashboardPage() {
   const [note, setNote] = useState("");
 
   useEffect(() => {
-    if (!user) return;
+    if (isPending || !user) return;
     let live = true;
     void myDashboard()
       .then((dash) => {
         if (!live) return;
         setData(dash);
         setName(dash.me.name);
+        setError("");
       })
-      .catch(() => {
-        if (live) setError(t("Could not load your dashboard.", "ዳሽቦርድዎን መጫን አልተቻለም።"));
+      .catch((err: unknown) => {
+        if (!live) return;
+        // Auth middleware throws Unauthorized when the session cookie is absent.
+        // Treat that as signed-out so the user is redirected, not stuck on a
+        // permanent "Could not load" banner after a failed login race.
+        const message = err instanceof Error ? err.message : String(err ?? "");
+        if (message === "Unauthorized" || message.includes("Unauthorized")) {
+          setError("");
+          setData(null);
+          return;
+        }
+        setError(t("Could not load your dashboard.", "ዳሽቦርድዎን መጫን አልተቻለም።"));
       });
     return () => {
       live = false;
     };
-  }, [user?.id]);
+  }, [user?.id, isPending, t]);
 
   if (isPending) return <div className="mx-auto max-w-5xl px-4 py-10"><Skeleton className="h-40" /></div>;
   if (!user) return <RedirectToSignIn />;
@@ -46,6 +57,7 @@ function DashboardPage() {
       </div>
     );
   }
+
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">

@@ -85,27 +85,40 @@ function LoginPage() {
       return;
     }
     setPending(true);
-    const result = register
-      ? await authClient.signUp.email({
-          email,
-          password,
-          name: name.trim(),
-          callbackURL: redirect,
-        })
-      : await authClient.signIn.email({
-          email,
-          password,
-          callbackURL: redirect,
-        });
-    setPending(false);
-    if (result.error) {
-      setError(
-        result.error.message ?? t("Could not sign in.", "መግባት አልተቻለም።"),
-      );
-      return;
+    try {
+      const result = register
+        ? await authClient.signUp.email({
+            email,
+            password,
+            name: name.trim(),
+            callbackURL: redirect,
+          })
+        : await authClient.signIn.email({
+            email,
+            password,
+            callbackURL: redirect,
+          });
+      if (result.error) {
+        setError(
+          result.error.message ?? t("Could not sign in.", "መግባት አልተቻለም።"),
+        );
+        return;
+      }
+      // Ensure the client session store is warm and the browser has processed
+      // Set-Cookie before the hard navigation. Without this, a race can land
+      // the user on /dashboard while useSession still reports signed-out and
+      // bounce them back to an empty login form.
+      try {
+        await authClient.getSession();
+      } catch {
+        /* navigation still proceeds; server will resolve the cookie */
+      }
+      window.location.assign(redirect);
+    } finally {
+      setPending(false);
     }
-    window.location.assign(redirect);
   }
+
 
   function setMode(next: Mode) {
     void navigate({ to: "/login", search: { mode: next, redirect } });

@@ -122,12 +122,28 @@ export function AdminApp({ tab }: { tab: string }) {
 
   if (isPending || (user && !me && !bootError)) return <div className="p-6"><Skeleton className="h-24" /></div>;
   if (!user) return <RedirectToSignIn />;
+  // Profile load failed (e.g. transient auth). Do NOT offer "Become the first
+  // administrator" — that would be wrong if an admin already exists and getMe
+  // merely failed. Show the error only; user can refresh.
+  if (bootError && !me) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <h1 className="font-display text-3xl">{t("Administrator", "አስተዳዳሪ")}</h1>
+        <p className="mt-3"><Banner tone="bad">{bootError}</Banner></p>
+        <button type="button" className="btn btn-secondary mt-4" onClick={() => window.location.reload()}>
+          {t("Try again", "እንደገና ይሞክሩ")}
+        </button>
+      </div>
+    );
+  }
+  // Only show first-admin claim when we successfully loaded the profile and the
+  // user is neither admin nor reviewer. claimAdmin itself still refuses if an
+  // admin already exists in the database.
   if (!me || (me.role !== "admin" && me.role !== "reviewer")) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <h1 className="font-display text-3xl">{t("Administrator setup", "የአስተዳዳሪ ማዋቀር")}</h1>
         <p className="mt-2 text-ink-soft">{t("The first signed-in person can claim the administrator role. After that, only an administrator can grant access.", "የመጀመሪያው የገባ ሰው የአስተዳዳሪ ሚና ሊወስድ ይችላል። ከዚያ በኋላ አስተዳዳሪ ብቻ መዳረሻ ይሰጣል።")}</p>
-        {bootError ? <p className="mt-3"><Banner tone="bad">{bootError}</Banner></p> : null}
         <button
           type="button"
           className="btn btn-primary mt-4"
@@ -140,9 +156,11 @@ export function AdminApp({ tab }: { tab: string }) {
         >
           {t("Become the first administrator", "የመጀመሪያ አስተዳዳሪ ሁን")}
         </button>
+        {bootError ? <p className="mt-3"><Banner tone="bad">{bootError}</Banner></p> : null}
       </div>
     );
   }
+
 
   const reviewer = me.role === "reviewer";
   const items: Array<{ id: AdminTab; label: string }> = reviewer
