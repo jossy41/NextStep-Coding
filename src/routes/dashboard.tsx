@@ -21,30 +21,54 @@ function DashboardPage() {
   const [note, setNote] = useState("");
 
   useEffect(() => {
+    // Wait until the client session has finished resolving before the first
+    // server-function call. Right after login the cookie is sometimes not yet
+    // visible to myDashboard() even though useSession already has a user.
     if (isPending || !user) return;
+
     let live = true;
-    void myDashboard()
-      .then((dash) => {
-        if (!live) return;
-        setData(dash);
-        setName(dash.me.name);
-        setError("");
-      })
-      .catch((err: unknown) => {
-        if (!live) return;
-        // Auth middleware throws Unauthorized when the session cookie is absent.
-        // Treat that as signed-out so the user is redirected, not stuck on a
-        // permanent "Could not load" banner after a failed login race.
-        const message = err instanceof Error ? err.message : String(err ?? "");
-        if (message === "Unauthorized" || message.includes("Unauthorized")) {
+    let attempt = 0;
+    const maxAttempts = 4;
+    let retryTimer: number | undefined;
+
+    const load = () => {
+      void myDashboard()
+        .then((dash) => {
+          if (!live) return;
+          setData(dash);
+          setName(dash.me.name);
           setError("");
-          setData(null);
-          return;
-        }
-        setError(t("Could not load your dashboard.", "ዳሽቦርድዎን መጫን አልተቻለም።"));
-      });
+        })
+        .catch((err: unknown) => {
+          if (!live) return;
+          attempt += 1;
+          // Transient Unauthorized (and other short-lived failures) are common
+          // on the first request after login. Retry a few times with backoff
+          // instead of leaving an endless skeleton or forcing a full reload.
+          if (attempt < maxAttempts) {
+            retryTimer = window.setTimeout(load, 150 * attempt);
+            return;
+          }
+          const message = err instanceof Error ? err.message : String(err ?? "");
+          if (message === "Unauthorized" || message.includes("Unauthorized")) {
+            // Session never became available to the server — clear message + retry
+            // control, not an infinite skeleton.
+            setError(
+              t(
+                "Could not load your dashboard. Try refreshing the page.",
+                "ዳሽቦርድዎን መጫን አልተቻለም። ገጹን እንደገና ይሞክሩ።",
+              ),
+            );
+            return;
+          }
+          setError(t("Could not load your dashboard.", "ዳሽቦርድዎን መጫን አልተቻለም።"));
+        });
+    };
+
+    load();
     return () => {
       live = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [user?.id, isPending, t]);
 
@@ -53,10 +77,36 @@ function DashboardPage() {
   if (!data) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10">
-        {error ? <Banner tone="bad">{error}</Banner> : <Skeleton className="h-40" />}
+        {error ? (
+          <div className="grid gap-3">
+            <Banner tone="bad">{error}</Banner>
+            <button
+              type="button"
+              className="btn btn-secondary w-fit"
+              onClick={() => {
+                setError("");
+                setData(null);
+                void myDashboard()
+                  .then((dash) => {
+                    setData(dash);
+                    setName(dash.me.name);
+                    setError("");
+                  })
+                  .catch(() => {
+                    setError(t("Could not load your dashboard.", "ዳሽቦርድዎን መጫን አልተቻለም።"));
+                  });
+              }}
+            >
+              {t("Try again", "እንደገና ይሞክሩ")}
+            </button>
+          </div>
+        ) : (
+          <Skeleton className="h-40" />
+        )}
       </div>
     );
   }
+
 
 
   return (
