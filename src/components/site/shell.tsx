@@ -54,7 +54,7 @@ function AuthSlot({ admin }: { admin: boolean }) {
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const { user } = useCurrentUserState();
+  const { user, isPending } = useCurrentUserState();
   const userId = user?.id ?? null;
   const [open, setOpen] = useState(false);
   const [admin, setAdmin] = useState(false);
@@ -63,23 +63,44 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setOpen(false), [path]);
 
+  // Load admin/reviewer role only after the session has finished resolving.
+  // Retry transient getMe failures (common right after login when the cookie /
+  // bearer is not yet visible to the server function). A single failed getMe
+  // must not permanently hide the Admin button for the rest of the session.
   useEffect(() => {
+    if (isPending) return;
     if (!userId) {
       setAdmin(false);
       return;
     }
     let live = true;
-    void getMe()
-      .then((me) => {
-        if (live) setAdmin(me.role === "admin" || me.role === "reviewer");
-      })
-      .catch(() => {
-        if (live) setAdmin(false);
-      });
+    let attempt = 0;
+    const maxAttempts = 4;
+    let retryTimer: number | undefined;
+
+    const load = () => {
+      void getMe()
+        .then((me) => {
+          if (!live) return;
+          setAdmin(me.role === "admin" || me.role === "reviewer");
+        })
+        .catch(() => {
+          if (!live) return;
+          attempt += 1;
+          if (attempt < maxAttempts) {
+            retryTimer = window.setTimeout(load, 150 * attempt);
+            return;
+          }
+          setAdmin(false);
+        });
+    };
+
+    load();
     return () => {
       live = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [userId]);
+  }, [userId, isPending]);
 
   useEffect(() => {
     let live = true;

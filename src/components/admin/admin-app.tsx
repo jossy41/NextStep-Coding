@@ -87,19 +87,38 @@ export function AdminApp({ tab }: { tab: string }) {
   const active = (TABS as readonly string[]).includes(tab) ? (tab as AdminTab) : "overview";
 
   useEffect(() => {
-    if (!user) return;
+    if (isPending) return;
+    if (!user) {
+      setMe(null);
+      return;
+    }
     let live = true;
-    void getMe()
-      .then((next) => {
-        if (live) setMe(next);
-      })
-      .catch(() => {
-        if (live) setBootError(t("Could not load your account.", "መለያዎን መጫን አልተቻለም።"));
-      });
+    let attempt = 0;
+    const maxAttempts = 4;
+    let retryTimer: number | undefined;
+    const load = () => {
+      void getMe()
+        .then((next) => {
+          if (!live) return;
+          setMe(next);
+          setBootError("");
+        })
+        .catch(() => {
+          if (!live) return;
+          attempt += 1;
+          if (attempt < maxAttempts) {
+            retryTimer = window.setTimeout(load, 150 * attempt);
+            return;
+          }
+          setBootError(t("Could not load your account.", "መለያዎን መጫን አልተቻለም።"));
+        });
+    };
+    load();
     return () => {
       live = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [user?.id]);
+  }, [user?.id, isPending, t]);
 
   if (isPending || (user && !me && !bootError)) return <div className="p-6"><Skeleton className="h-24" /></div>;
   if (!user) return <RedirectToSignIn />;
