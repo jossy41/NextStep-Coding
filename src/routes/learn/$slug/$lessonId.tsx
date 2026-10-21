@@ -7,7 +7,7 @@ import type { LessonPayload } from "@/lib/learning-types";
 import { parseResources } from "@/lib/resources";
 import { pick } from "@/lib/text";
 import { youtubeEmbed } from "@/lib/youtube";
-import { completeLesson, getLesson, submitProject, submitQuiz } from "@/server/api";
+import { completeLesson, enroll, getCourse, getLesson, submitProject, submitQuiz } from "@/server/api";
 
 export const Route = createFileRoute("/learn/$slug/$lessonId")({
   component: LearnPage,
@@ -21,6 +21,8 @@ function LearnPage() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [reload, setReload] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [review, setReview] = useState<Array<{ id: string; correct: boolean; explanation: string; correctIndex: number }>>([]);
   const [url, setUrl] = useState("");
@@ -54,21 +56,82 @@ function LearnPage() {
     return () => {
       live = false;
     };
-  }, [slug, lessonId]);
+  }, [slug, lessonId, reload]);
 
   async function refresh() {
     const result = await getLesson({ data: { slug, lessonId } });
     if (result.ok) setPayload(result.lesson);
   }
 
+  async function onEnroll() {
+    setError("");
+    setEnrolling(true);
+    try {
+      const course = await getCourse({ data: { slug } });
+      if (!course || ("ok" in course && course.ok === false) || !("id" in course)) {
+        setError(t("This course is not open for enrollment.", "ይህ ኮርስ ለምዝገባ አልተከፈተም።"));
+        return;
+      }
+      const result = await enroll({ data: { courseId: course.id } });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setReload((value) => value + 1);
+    } finally {
+      setEnrolling(false);
+    }
+  }
+
   if (loading) return <div className="mx-auto max-w-6xl px-4 py-10"><Skeleton className="h-80" /></div>;
   if (!payload) {
+    const back = `/learn/${slug}/${lessonId}`;
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <h1 className="font-display text-3xl">
-          {gate === "enroll" ? t("Enroll to open lessons", "ትምህርቶችን ለመክፈት ይመዝገቡ") : t("Lesson unavailable", "ትምህርቱ አይገኝም")}
+          {gate === "auth"
+            ? t("Sign in to watch this course", "ይህን ኮርስ ለመመልከት ይግቡ")
+            : gate === "enroll"
+              ? t("Enroll to watch this course", "ይህን ኮርስ ለመመልከት ይመዝገቡ")
+              : t("Lesson unavailable", "ትምህርቱ አይገኝም")}
         </h1>
-        <Link to="/courses/$slug" params={{ slug }} className="btn btn-primary mt-4">{t("Back to course", "ወደ ኮርሱ")}</Link>
+        {gate === "auth" ? (
+          <p className="mt-3 text-ink-soft">
+            {t(
+              "Create an account or sign in, then enroll in this course. Signing in does not unlock every course, and videos stay locked until you enroll in this one.",
+              "መለያ ይክፈቱ ወይም ይግቡ፣ ከዚያ በዚህ ኮርስ ይመዝገቡ። መግባት ብቻ ሁሉንም ኮርሶች አይከፍትም። ቪዲዮዎች በዚህ ኮርስ እስኪመዘገቡ ድረስ ተቆልፈው ይቆያሉ።",
+            )}
+          </p>
+        ) : null}
+        {gate === "enroll" ? (
+          <p className="mt-3 text-ink-soft">
+            {t(
+              "You are signed in, but you are not enrolled in this course. Enrollment is separate for each course.",
+              "ገብተዋል፣ ነገር ግን በዚህ ኮርስ አልተመዘገቡም። ምዝገባ ለእያንዳንዱ ኮርስ የተለየ ነው።",
+            )}
+          </p>
+        ) : null}
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {gate === "auth" ? (
+            <>
+              <Link to="/login" search={{ mode: "register", redirect: back }} className="btn btn-primary">
+                {t("Create an account", "መለያ ይክፈቱ")}
+              </Link>
+              <Link to="/login" search={{ mode: "login", redirect: back }} className="btn btn-secondary">
+                {t("Sign in", "ይግቡ")}
+              </Link>
+            </>
+          ) : null}
+          {gate === "enroll" ? (
+            <button type="button" className="btn btn-primary" disabled={enrolling} onClick={() => void onEnroll()}>
+              {t("Enroll in this course", "በዚህ ኮርስ ይመዝገቡ")}
+            </button>
+          ) : null}
+          <Link to="/courses/$slug" params={{ slug }} className="btn btn-ghost">
+            {t("Back to course", "ወደ ኮርሱ")}
+          </Link>
+        </div>
+        {error ? <p className="mt-4"><Banner tone="bad">{error}</Banner></p> : null}
       </div>
     );
   }
@@ -105,7 +168,7 @@ function LearnPage() {
           <h1 className="font-display text-4xl">{pick(lang, lesson.title, lesson.titleAm)}</h1>
           <p className="text-sm text-muted">{lesson.durationMinutes} {t("min", "ደቂቃ")}</p>
         </header>
-        {payload.video ? (
+        {payload.video?.youtubeId ? (
           <div className="card overflow-hidden">
             {payload.video.status !== "published" ? <p className="px-4 pt-3 text-xs font-bold text-warn">{t("Draft video", "ረቂቅ ቪዲዮ")}</p> : null}
             <iframe
