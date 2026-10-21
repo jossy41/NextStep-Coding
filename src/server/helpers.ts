@@ -13,6 +13,7 @@ import type {
   RubricItem,
   VideoItem,
 } from "@/lib/learning-types";
+import { redactLockedVideoIds } from "@/server/video-access";
 
 export type Role = "student" | "admin" | "reviewer";
 export type Fail = { ok: false; error: string };
@@ -329,7 +330,7 @@ export async function detailFor(
   if (row.status === "draft" && !isStaff) return { ok: false, error: "not_found" };
   if (row.status === "archived" && !isStaff && !enrolled) return { ok: false, error: "not_found" };
 
-  const modules = await outlines(sql, row.id);
+  const modules = redactLockedVideoIds(await outlines(sql, row.id), enrolled || isStaff);
   const done = userId
     ? await sql<{ lesson_id: string }>`
         select lp.lesson_id from lesson_progress lp

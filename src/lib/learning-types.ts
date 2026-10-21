@@ -78,6 +78,8 @@ export type VideoItem = {
   courseTitle: string | null;
   status: "draft" | "published";
   sortOrder: number;
+  /** True when playback fields were withheld because the viewer is not enrolled. */
+  locked?: boolean;
 };
 
 export type PostItem = {

@@ -341,11 +341,17 @@ export function HomePage({
                   params={{ id: video.id }}
                   className="card overflow-hidden"
                 >
-                  <img
-                    src={video.thumbnailUrl || youtubeThumbnail(video.youtubeId)}
-                    alt=""
-                    className="aspect-video w-full object-cover"
-                  />
+                  {video.youtubeId ? (
+                    <img
+                      src={video.thumbnailUrl || youtubeThumbnail(video.youtubeId)}
+                      alt=""
+                      className="aspect-video w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid aspect-video place-items-center bg-ink px-4 text-center text-sm font-bold text-paper">
+                      {t("Enroll to watch", "ለመመልከት ይመዝገቡ")}
+                    </div>
+                  )}
                   <div className="p-4">
                     <p className="text-xs font-bold uppercase tracking-wide text-muted">
                       {video.language === "am" ? "አማርኛ" : "English"}

@@ -49,7 +49,13 @@ function VideosPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {videos.map((video) => (
             <Link key={video.id} to="/videos/$id" params={{ id: video.id }} className="card overflow-hidden">
-              <img src={video.thumbnailUrl || youtubeThumbnail(video.youtubeId)} alt="" className="aspect-video w-full object-cover" />
+              {video.youtubeId ? (
+                <img src={video.thumbnailUrl || youtubeThumbnail(video.youtubeId)} alt="" className="aspect-video w-full object-cover" />
+              ) : (
+                <div className="grid aspect-video place-items-center bg-ink px-4 text-center text-sm font-bold text-paper">
+                  {t("Enroll to watch", "ለመመልከት ይመዝገቡ")}
+                </div>
+              )}
               <div className="p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted">{video.category}</p>
                 <h2 className="mt-1 font-display text-xl">{video.title}</h2>

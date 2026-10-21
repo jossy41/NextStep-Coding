@@ -110,9 +110,30 @@ function CoursePage() {
               </Link>
             </>
           ) : (
-            <button type="button" className="btn btn-primary mt-4 w-full" disabled={isPending || course.status !== "published"} onClick={() => void onEnroll()}>
-              {course.status === "published" ? t("Enroll", "ተመዝገብ") : t("Not open yet", "ገና አልተከፈተም")}
-            </button>
+            <>
+              <button type="button" className="btn btn-primary mt-4 w-full" disabled={isPending || course.status !== "published"} onClick={() => void onEnroll()}>
+                {course.status !== "published"
+                  ? t("Not open yet", "ገና አልተከፈተም")
+                  : user
+                    ? t("Enroll", "ተመዝገብ")
+                    : t("Sign in to enroll", "ለመመዝገብ ይግቡ")}
+              </button>
+              {!user && course.status === "published" ? (
+                <p className="mt-3 text-sm text-ink-soft">
+                  {t(
+                    "Videos in this course stay locked until you create an account and enroll. Enrollment does not unlock other courses.",
+                    "የዚህ ኮርስ ቪዲዮዎች መለያ ከፈቱ በኋላ እስኪመዘገቡ ድረስ ተቆልፈው ይቆያሉ። ምዝገባ ሌሎች ኮርሶችን አይከፍትም።",
+                  )}{" "}
+                  <Link
+                    to="/login"
+                    search={{ mode: "register", redirect: `/courses/${course.slug}` }}
+                    className="font-bold text-accent"
+                  >
+                    {t("Create an account", "መለያ ይክፈቱ")}
+                  </Link>
+                </p>
+              ) : null}
+            </>
           )}
           {message ? <p className="mt-3"><Banner tone="ok">{message}</Banner></p> : null}
           {error ? <p className="mt-3"><Banner tone="bad">{error}</Banner></p> : null}

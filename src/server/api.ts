@@ -36,6 +36,14 @@ import {
   type Fail,
   type Role,
 } from "@/server/helpers";
+import {
+  decideCourseVideoAccess,
+  decideLessonVideoAccess,
+  courseGateForVideo,
+  planEnrollment,
+  presentCatalogVideos,
+  type CourseGate,
+} from "@/server/video-access";
 
 async function ready() {
   const { ensureCatalog } = await import("@/server/seed");
@@ -62,6 +70,53 @@ async function staff(sql: Sql, userId: string | null): Promise<boolean> {
   return (await roleOf(sql, userId)) === "admin";
 }
 
+async function enrolledCourseIds(sql: Sql, userId: string | null): Promise<string[]> {
+  if (!userId) return [];
+  const rows = await sql<{ course_id: string }>`
+    select course_id from enrollments where user_id = ${userId}
+  `;
+  return rows.map((row) => row.course_id);
+}
+
+async function lessonVideoCourses(sql: Sql): Promise<Map<string, string>> {
+  const rows = await sql<{ video_resource_id: string | null; course_id: string }>`
+    select l.video_resource_id, m.course_id
+    from lessons l
+    join modules m on m.id = l.module_id
+    where l.video_resource_id is not null
+  `;
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (row.video_resource_id && !map.has(row.video_resource_id)) {
+      map.set(row.video_resource_id, row.course_id);
+    }
+  }
+  return map;
+}
+
+function toCourseGates(
+  courses: Array<{ id: string; slug: string; status: string; title: string | null }>,
+): CourseGate[] {
+  return courses.map((course) => ({
+    id: course.id,
+    slug: course.slug,
+    status: course.status,
+    title: course.title ?? course.slug,
+  }));
+}
+
+async function catalogAccess(sql: Sql, userId: string | null) {
+  const isAdmin = await staff(sql, userId);
+  const courses = await allCourses(sql);
+  return {
+    isAdmin,
+    gates: toCourseGates(courses),
+    links: await lessonVideoCourses(sql),
+    enrolled: await enrolledCourseIds(sql, userId),
+    courses,
+  };
+}
+
 export const getPublicSettings = createServerFn({ method: "GET" }).handler(async () => {
   await ready();
   const sql = await getSql();
@@ -69,20 +124,28 @@ export const getPublicSettings = createServerFn({ method: "GET" }).handler(async
   return { orgName: map.org_name || "NextStep Coding", contactEmail: map.contact_email || "" };
 });
 
-export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () => {
-  await ready();
-  const sql = await getSql();
-  const courses = (await allCourses(sql)).map(toCard).filter((course) => course.status === "published");
-  const videos = (await allVideos(sql)).filter((video) => video.status === "published");
-  const posts = (await allPosts(sql)).filter(postVisible);
-  const map = await settingsMap(sql);
-  return {
-    courses,
-    videos: videos.slice(0, 3),
-    posts: posts.slice(0, 3),
-    contactEmail: map.contact_email || "",
-  };
-});
+export const getHomeFeed = createServerFn({ method: "GET" })
+  .middleware([optionalAuth])
+  .handler(async ({ context }) => {
+    await ready();
+    const sql = await getSql();
+    const userId = (context as { userId: string | null }).userId;
+    const access = await catalogAccess(sql, userId);
+    const courses = access.courses.map(toCard).filter((course) => course.status === "published");
+    const videos = presentCatalogVideos(await allVideos(sql), access.gates, access.links, {
+      viewerId: userId,
+      isAdmin: access.isAdmin,
+      enrolledCourseIds: access.enrolled,
+    }).slice(0, 3);
+    const posts = (await allPosts(sql)).filter(postVisible);
+    const map = await settingsMap(sql);
+    return {
+      courses,
+      videos,
+      posts: posts.slice(0, 3),
+      contactEmail: map.contact_email || "",
+    };
+  });
 
 export const listCourses = createServerFn({ method: "GET" })
   .validator(input)
@@ -127,23 +190,31 @@ export const getLesson = createServerFn({ method: "GET" })
     if (!row) return { ok: false, error: "not_found" };
     const userId = (context as { userId: string | null }).userId;
     const isAdmin = await staff(sql, userId);
-    const enrolled = userId
-      ? (
-          await sql`select id from enrollments where user_id = ${userId} and course_id = ${row.id}`
-        ).length > 0
-      : false;
     if (row.status === "draft" && !isAdmin) return { ok: false, error: "not_found" };
-    if (row.status === "archived" && !isAdmin && !enrolled) return { ok: false, error: "not_found" };
-    if (!isAdmin && !enrolled && row.status === "published") {
-      // Lessons are readable after enroll. Catalog visitors can still open the course page.
-      return { ok: false, error: "enroll" };
-    }
 
     const modules = await outlines(sql, row.id);
     const flat = flatLessons(modules);
     const lessonId = clip(data.lessonId, 80);
     const index = flat.findIndex((lesson) => lesson.id === lessonId);
-    if (index < 0) return { ok: false, error: "not_found" };
+    const lessonCourseId = index >= 0 ? row.id : null;
+    const enrolledIds = await enrolledCourseIds(sql, userId);
+    const enrolled = enrolledIds.includes(row.id);
+    if (row.status === "archived" && !isAdmin && !enrolled) return { ok: false, error: "not_found" };
+
+    const lessonGate = decideLessonVideoAccess({
+      requestedCourseId: row.id,
+      lessonCourseId,
+      viewerId: userId,
+      isAdmin,
+      enrolledCourseIds: enrolledIds,
+      youtubeId: null,
+      claimedCourseId: typeof data.courseId === "string" ? data.courseId : null,
+      claimedUserId: typeof data.userId === "string" ? data.userId : null,
+    });
+    if (lessonGate.outcome === "hide") return { ok: false, error: "not_found" };
+    if (lessonGate.outcome === "auth") return { ok: false, error: "auth" };
+    if (lessonGate.outcome === "enroll") return { ok: false, error: "enroll" };
+
     const lessons = await sql<{
       id: string;
       title: string;
@@ -156,26 +227,40 @@ export const getLesson = createServerFn({ method: "GET" })
       duration_minutes: number;
       video_resource_id: string | null;
     }>`
-      select id, title, title_am, content, content_am, exercises, exercises_am, resources,
-        duration_minutes, video_resource_id
-      from lessons where id = ${lessonId}
+      select l.id, l.title, l.title_am, l.content, l.content_am, l.exercises, l.exercises_am, l.resources,
+        l.duration_minutes, l.video_resource_id
+      from lessons l
+      join modules m on m.id = l.module_id
+      where l.id = ${lessonId} and m.course_id = ${row.id}
     `;
     const lesson = lessons[0];
     if (!lesson) return { ok: false, error: "not_found" };
 
     let video: LessonPayload["video"] = null;
     if (lesson.video_resource_id) {
-      const videos = await sql<{ id: string; title: string; youtube_id: string; status: string }>`
-        select id, title, youtube_id, status from video_resources where id = ${lesson.video_resource_id}
+      const videos = await sql<{ id: string; title: string; youtube_id: string; status: string; course_id: string | null }>`
+        select id, title, youtube_id, status, course_id from video_resources where id = ${lesson.video_resource_id}
       `;
       const found = videos[0];
       if (found && (found.status === "published" || isAdmin)) {
-        video = {
-          id: found.id,
-          title: found.title,
+        const revealed = decideLessonVideoAccess({
+          requestedCourseId: row.id,
+          lessonCourseId: row.id,
+          videoCourseId: found.course_id,
+          viewerId: userId,
+          isAdmin,
+          enrolledCourseIds: enrolledIds,
           youtubeId: found.youtube_id,
-          status: found.status === "published" ? "published" : "draft",
-        };
+          claimedCourseId: typeof data.courseId === "string" ? data.courseId : null,
+        });
+        if (revealed.outcome === "allow" && revealed.youtubeId) {
+          video = {
+            id: found.id,
+            title: found.title,
+            youtubeId: revealed.youtubeId,
+            status: found.status === "published" ? "published" : "draft",
+          };
+        }
       }
     }
 
@@ -258,15 +343,21 @@ export const getLesson = createServerFn({ method: "GET" })
   });
 
 export const listVideos = createServerFn({ method: "GET" })
+  .middleware([optionalAuth])
   .validator(input)
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     await ready();
     const sql = await getSql();
+    const userId = (context as { userId: string | null }).userId;
+    const access = await catalogAccess(sql, userId);
     const q = clip(data.q, 80).toLowerCase();
     const category = clip(data.category, 80);
     const language = clip(data.language, 8);
-    const videos = (await allVideos(sql))
-      .filter((video) => video.status === "published")
+    const videos = presentCatalogVideos(await allVideos(sql), access.gates, access.links, {
+      viewerId: userId,
+      isAdmin: access.isAdmin,
+      enrolledCourseIds: access.enrolled,
+    })
       .filter((video) => (category && category !== "all" ? video.category === category : true))
       .filter((video) => (language && language !== "all" ? video.language === language : true))
       .filter((video) => (q ? `${video.title} ${video.description} ${video.category}`.toLowerCase().includes(q) : true));
@@ -277,15 +368,39 @@ export const listVideos = createServerFn({ method: "GET" })
 export const getVideo = createServerFn({ method: "GET" })
   .middleware([optionalAuth])
   .validator(input)
-  .handler(async ({ data, context }): Promise<{ ok: true; video: VideoItem } | Fail> => {
+  .handler(async ({ data, context }): Promise<
+    | { ok: true; video: VideoItem }
+    | {
+        ok: false;
+        error: "not_found" | "auth" | "enroll";
+        courseId?: string;
+        courseSlug?: string;
+        courseTitle?: string;
+      }
+  > => {
     await ready();
     const sql = await getSql();
-    const videos = (await allVideos(sql)).filter((video) => video.id === clip(data.id, 80));
-    const video = videos[0];
-    if (!video) return { ok: false, error: "not_found" };
     const userId = (context as { userId: string | null }).userId;
-    if (video.status !== "published" && !(await staff(sql, userId))) return { ok: false, error: "not_found" };
-    return { ok: true, video };
+    const access = await catalogAccess(sql, userId);
+    const video = (await allVideos(sql)).find((item) => item.id === clip(data.id, 80)) ?? null;
+    if (!video) return { ok: false, error: "not_found" };
+    const decision = decideCourseVideoAccess({
+      video,
+      course: courseGateForVideo(video, access.gates, access.links),
+      viewerId: userId,
+      isAdmin: access.isAdmin,
+      enrolledCourseIds: access.enrolled,
+      claimedCourseId: typeof data.courseId === "string" ? data.courseId : null,
+    });
+    if (decision.outcome === "allow") return { ok: true, video: { ...video, locked: false } };
+    if (decision.outcome === "hide") return { ok: false, error: "not_found" };
+    return {
+      ok: false,
+      error: decision.outcome,
+      courseId: decision.courseId,
+      courseSlug: decision.courseSlug,
+      courseTitle: decision.courseTitle,
+    };
   });
 
 export const listPosts = createServerFn({ method: "GET" })
@@ -417,12 +532,24 @@ export const enroll = createServerFn({ method: "POST" })
     const sql = await getSql();
     await ensureProfile(sql, context.userId);
     const row = await courseById(sql, clip(data.courseId, 80));
-    if (!row || row.status !== "published") return { ok: false, error: "That course is not open for enrollment." };
-    await sql`
-      insert into enrollments (id, user_id, course_id)
-      values (${nid("enr")}, ${context.userId}, ${row.id})
-      on conflict (user_id, course_id) do nothing
-    `;
+    const existing = row
+      ? await sql`select id from enrollments where user_id = ${context.userId} and course_id = ${row.id}`
+      : [];
+    const plan = planEnrollment({
+      sessionUserId: context.userId,
+      claimedUserId: typeof data.userId === "string" ? data.userId : null,
+      courseExists: Boolean(row),
+      courseStatus: row?.status ?? null,
+      alreadyEnrolled: existing.length > 0,
+    });
+    if (plan.action === "reject") return { ok: false, error: plan.error };
+    if (plan.action === "insert") {
+      await sql`
+        insert into enrollments (id, user_id, course_id)
+        values (${nid("enr")}, ${plan.userId}, ${row!.id})
+        on conflict (user_id, course_id) do nothing
+      `;
+    }
     return { ok: true };
   });
 
