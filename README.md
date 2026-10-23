@@ -173,6 +173,14 @@ NextStep Coding is an evolving project. I continue to explore improvements to it
 
 The live application demonstrates the user experience, while the source repository provides a view of the underlying implementation.
 
+🤖 AI Assistance and Development Disclosure
+
+NextStep Coding was developed by me, with assistance from Grok by xAI as a development tool. I used AI assistance during parts of the development process, including exploring implementation approaches, troubleshooting issues, and refining code. I remained actively involved in directing the project's development, making design and implementation decisions, reviewing changes, and testing functionality.
+
+The project reflects an iterative development process in which AI assistance supported my work while I remained responsible for the overall direction and the resulting implementation.
+
+This disclosure acknowledges the role of AI in the development process while recognizing my own contributions to building and refining the platform.
+
 👨‍💻 About the Developer
 
 I'm a secondary-school student from Ethiopia with a strong interest in computer science, software engineering, and building practical applications.
